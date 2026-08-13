@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import { seccionDe } from '$lib/secciones';
 
 	let { children, data } = $props();
@@ -18,6 +19,34 @@
 	const panel = $derived(
 		data?.sesion ? (data.sesion.rol === 'veedor' ? '/veeduria' : '/mi-lugar') : null
 	);
+
+	/**
+	 * Última limpieza del token de la URL.
+	 *
+	 * El servidor ya lo canjea por cookie y redirige sin él, pero Netlify le
+	 * vuelve a pegar el query string de la petición a la `Location` —incluso
+	 * absoluta—, así que el `?k=` reaparece en la barra. Acá se borra del
+	 * historial, que es donde de verdad importa: es lo que queda si alguien
+	 * comparte un pantallazo o le presta el celular a otro.
+	 *
+	 * Va en el cliente a propósito: ningún proxy puede volver a meter mano.
+	 */
+	$effect(() => {
+		if (!page.url.searchParams.has('k')) return;
+
+		const limpia = new URL(page.url);
+		limpia.searchParams.delete('k');
+
+		// Envuelto porque esto corre en el layout raíz: `replaceState` revienta
+		// si el router todavía no terminó de arrancar, y ahí se caería toda la
+		// app por una limpieza cosmética. Que quede el token en la barra es
+		// molesto; que no cargue la pantalla, en una emergencia, es grave.
+		try {
+			replaceState(limpia.pathname + limpia.search, page.state);
+		} catch {
+			history.replaceState(history.state, '', limpia.pathname + limpia.search);
+		}
+	});
 </script>
 
 <svelte:head>
