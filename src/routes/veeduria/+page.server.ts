@@ -1,41 +1,31 @@
-import { error } from '@sveltejs/kit';
-import { leerToken, requireVeedor } from '$lib/server/auth';
+import { requireSesionVeedor } from '$lib/server/auth';
 import { supabase } from '$lib/server/supabase';
-import { detectarDuplicados, listarReportesPendientes, listarTokens } from '$lib/server/veeduria';
-import type { LugarConNecesidades, Necesidad } from '$lib/types';
+import { CAMPOS, normalizar } from '$lib/server/lugares';
+import { listarReportesPendientes } from '$lib/server/reportes';
+import { detectarDuplicados } from '$lib/server/veeduria';
 import type { PageServerLoad } from './$types';
 
-type FilaCruda = Omit<LugarConNecesidades, 'necesidades'> & {
-	lugar_necesidades: Necesidad[] | null;
-};
-
-export const load: PageServerLoad = async ({ url, setHeaders }) => {
-	setHeaders({ 'cache-control': 'private, no-store' });
-
-	const valor = leerToken(url);
-	if (!valor) throw error(401, 'Abra el link de veeduría');
-	await requireVeedor(valor);
+export const load: PageServerLoad = async (event) => {
+	event.setHeaders({ 'cache-control': 'private, no-store' });
+	requireSesionVeedor(event);
 
 	const { data } = await supabase
 		.from('lugares')
-		.select('*, lugar_necesidades ( etiqueta, nivel )')
+		.select(CAMPOS)
 		.order('creado_en', { ascending: false });
 
-	const lugares: LugarConNecesidades[] = ((data ?? []) as FilaCruda[]).map((fila) => {
-		const { lugar_necesidades, ...resto } = fila;
-		return { ...resto, necesidades: lugar_necesidades ?? [] };
-	});
-
-	const [tokens, reportes] = await Promise.all([listarTokens(), listarReportesPendientes()]);
+	const lugares = ((data ?? []) as Parameters<typeof normalizar>[0][]).map(normalizar);
+	const reportes = await listarReportesPendientes();
 
 	// El Map no sobrevive la serialización del load: se manda como objeto plano.
 	const duplicados = Object.fromEntries(detectarDuplicados(lugares));
 
-	// Conteo de reportes por lugar, para subir al tope lo que el público señala.
-	const reportesPorLugar: Record<string, number> = {};
+	// Los reportes se entregan agrupados por lugar: en la pantalla no son una
+	// cola aparte sino una marca sobre el lugar publicado que los recibió.
+	const reportesPorLugar: Record<string, typeof reportes> = {};
 	for (const reporte of reportes) {
-		reportesPorLugar[reporte.lugar_id] = (reportesPorLugar[reporte.lugar_id] ?? 0) + 1;
+		(reportesPorLugar[reporte.lugar_id] ??= []).push(reporte);
 	}
 
-	return { lugares, tokens, reportes, duplicados, reportesPorLugar };
+	return { lugares, duplicados, reportesPorLugar };
 };

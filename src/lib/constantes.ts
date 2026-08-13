@@ -70,11 +70,50 @@ export const NECESIDADES: { valor: EtiquetaNecesidad; nombre: string; emoji: str
 	{ valor: 'transporte', nombre: 'Transporte', emoji: '🚚' }
 ];
 
-export const NIVELES: { valor: NivelNecesidad; nombre: string; clase: string }[] = [
-	{ valor: 'urgente', nombre: 'Urgente', clase: 'bg-red-100 text-red-900 border-red-300' },
-	{ valor: 'recibiendo', nombre: 'Recibiendo', clase: 'bg-stone-100 text-stone-700 border-stone-300' },
-	{ valor: 'no_recibir', nombre: 'Ya no recibimos', clase: 'bg-stone-100 text-stone-500 border-stone-300 line-through' }
+/**
+ * Semáforo, y se lee como tal en toda la app: verde se recibe, rojo hace falta
+ * ya, amarillo no traigan más. El orden del array es el del ciclo de toques —
+ * el primer toque deja «recibiendo», que es lo que quiere decir la mayoría.
+ */
+export const NIVELES: {
+	valor: NivelNecesidad;
+	nombre: string;
+	corto: string;
+	clase: string;
+	punto: string;
+}[] = [
+	{
+		valor: 'recibiendo',
+		nombre: 'Recibiendo',
+		corto: 'Recibiendo',
+		clase: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+		punto: 'bg-emerald-500'
+	},
+	{
+		valor: 'urgente',
+		nombre: 'Urgente',
+		corto: 'Urgente',
+		clase: 'bg-red-100 text-red-900 border-red-300',
+		punto: 'bg-red-500'
+	},
+	{
+		valor: 'no_recibir',
+		nombre: 'Ya no recibimos',
+		corto: 'Ya no',
+		clase: 'bg-amber-100 text-amber-900 border-amber-300',
+		punto: 'bg-amber-500'
+	}
 ];
+
+/**
+ * Siguiente estado de un toque: sin marcar → recibiendo → urgente → ya no →
+ * sin marcar. Vive acá y no en cada componente para que el chip de categorías
+ * del formulario y el de cada ítem se comporten igual.
+ */
+export function siguienteNivel(actual: NivelNecesidad | null | undefined): NivelNecesidad | null {
+	const i = NIVELES.findIndex((n) => n.valor === actual);
+	return i === -1 ? NIVELES[0].valor : (NIVELES[i + 1]?.valor ?? null);
+}
 
 export const MOTIVOS_REPORTE: { valor: string; nombre: string }[] = [
 	{ valor: 'ya_no_reciben', nombre: 'Ya no reciben donaciones' },

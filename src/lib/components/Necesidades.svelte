@@ -25,8 +25,8 @@
 			<li class="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium {nivel?.clase}">
 				<span aria-hidden="true">{info?.emoji}</span>
 				{info?.nombre}
-				{#if necesidad.nivel === 'urgente'}
-					<span class="font-bold">· urgente</span>
+				{#if necesidad.nivel !== 'recibiendo'}
+					<span class="font-bold">· {nivel?.corto.toLowerCase()}</span>
 				{/if}
 			</li>
 		{/each}

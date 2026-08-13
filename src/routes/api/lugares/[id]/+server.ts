@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { supabase } from '$lib/server/supabase';
-import { leerToken, registrarEdicion, requireVeedor } from '$lib/server/auth';
+import { registrarEdicion, requireVeedor } from '$lib/server/auth';
 import { validateOptionalText } from '$lib/server/validate';
 import type { EstadoModeracion } from '$lib/types';
 import type { RequestHandler } from './$types';
@@ -12,10 +12,11 @@ const ACCIONES: Record<string, EstadoModeracion> = {
 };
 
 /** Moderación. Solo veeduría. */
-export const PATCH: RequestHandler = async ({ request, url, params }) => {
-	const token = await requireVeedor(leerToken(url, request));
+export const PATCH: RequestHandler = async (event) => {
+	const { params } = event;
+	const token = await requireVeedor(event);
 
-	const cuerpo = await request.json().catch(() => null);
+	const cuerpo = await event.request.json().catch(() => null);
 	const estado = ACCIONES[cuerpo?.accion as string];
 	if (!estado) throw error(400, 'Acción inválida');
 
@@ -36,8 +37,9 @@ export const PATCH: RequestHandler = async ({ request, url, params }) => {
 };
 
 /** Borrado definitivo, para spam evidente. Arrastra necesidades y reportes. */
-export const DELETE: RequestHandler = async ({ request, url, params }) => {
-	const token = await requireVeedor(leerToken(url, request));
+export const DELETE: RequestHandler = async (event) => {
+	const { params } = event;
+	const token = await requireVeedor(event);
 
 	await registrarEdicion(null, token.id, 'borrar', { lugar_id: params.id });
 

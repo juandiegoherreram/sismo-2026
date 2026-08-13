@@ -67,3 +67,23 @@ body {
   @apply font-sans;
   background: #e7e5e4;
 }
+
+/* Mapa fijo: el recuadro "dónde queda" de una ficha, que vive dentro de un
+   enlace a la app de navegación. Leaflet vuelve a prender `pointer-events` en
+   los marcadores y en los controles, así que no basta con apagarlo en el
+   contenedor: hay que apagarlo en todo el árbol para que el toque llegue al
+   enlace. La atribución sigue visible, que es lo que exige OpenStreetMap. */
+.mapa-fijo,
+.mapa-fijo * {
+  pointer-events: none !important;
+}
+
+/* El globo del mapa lleva el mismo contenido que una tarjeta de la lista, y
+   los márgenes que Leaflet le pone por defecto a cada <p> lo desarman. */
+.leaflet-popup-content {
+  margin: 12px 14px;
+}
+
+.leaflet-popup-content p {
+  margin: 0;
+}

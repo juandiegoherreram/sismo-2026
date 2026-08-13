@@ -24,6 +24,49 @@ duplicados y datos falsos en horas. Entonces:
 El token es una *capability key*: en la base solo vive su SHA-256, y quien tiene el link
 edita su lugar sin contraseñas ni recuperación de cuenta a las 3 de la mañana.
 
+## El link mágico
+
+Abrir el link **es** iniciar sesión. `hooks.server.ts` intercepta el `?k=…`, lo valida, lo
+guarda en una cookie `httpOnly` de 30 días y redirige a la misma ruta ya sin el token.
+
+Sacarlo de la URL cuanto antes importa: mientras vive ahí queda en el historial, en el
+`Referer` de cualquier link saliente y en la captura de pantalla que la gente manda por
+WhatsApp para pedir ayuda. El link original sigue sirviendo cuantas veces lo abran, que es
+como se usa en la práctica: guardado en un chat.
+
+Si la cookie se pierde —celular nuevo, navegador limpiado, link que llegó sin ser
+clickeable— `/entrar` deja pegar el link completo o dictar solo el código. `/salir` cierra
+la sesión en ese dispositivo sin revocar nada.
+
+## Primera vez vs. modo edición
+
+`/mi-lugar` es una sola ruta con dos caras, según el token tenga lugar o no:
+
+- **Sin lugar** → pantalla de setup: se registra el centro y se acabó el asistente.
+- **Con lugar** → panel: estado operativo de un toque, la lista de lo que necesitan hoy, y
+  los datos del lugar detrás de un «Editar».
+
+## Qué necesitan, en dos niveles
+
+- **Categorías** (agua, comida, medicamentos…) — lista cerrada, es lo que alimenta los
+  filtros y el mapa.
+- **Ítems escritos a mano** ("pañales talla 2", "acetaminofén") — cada uno se clasifica
+  solo con la heurística de [src/lib/categorizar.ts](src/lib/categorizar.ts), y quien
+  escribe puede corregir la categoría. Así un ítem suelto también entra en los filtros.
+- **Texto libre**, hasta 2000 caracteres, sin marcado ni links: se muestra tal cual, con
+  los saltos de línea respetados. Lo actualiza el centro sin pasar por moderación.
+
+## Direcciones
+
+La dirección se guarda descompuesta y en campos propios —barrio, edificio, torre, piso,
+apto— porque un acopio en la torre B de un conjunto no lo encuentra ningún geocodificador,
+y sin eso la gente llega a la portería y no sabe para dónde coger.
+
+El buscador de direcciones va contra Photon (OpenStreetMap) **desde el servidor**
+(`/api/geo`, detrás de sesión): así la IP de cada persona no se le entrega a un tercero y
+el límite de peticiones se controla en un punto. Si el servicio se cae, el mapa sigue
+sirviendo a punta de toque — buscar es una comodidad, nunca un requisito.
+
 ## Arranque
 
 ```bash
@@ -34,13 +77,26 @@ npm run dev
 
 ### Supabase
 
-1. Cree un proyecto y corra `supabase/migrations/001_initial_schema.sql` en el SQL editor.
-2. Opcional, para probar con datos: corra `supabase/seed.sql`.
+1. Cree un proyecto y corra las migraciones de `supabase/migrations/` **en orden** desde el
+   SQL editor, o con el CLI:
+
+   ```bash
+   npx supabase db push --db-url '<url del pooler>'
+   ```
+2. Opcional, para probar con datos:
+
+   ```bash
+   node scripts/sembrar.mjs "Su nombre"   # ejemplos + su acceso de veeduría
+   node scripts/sembrar.mjs --limpiar     # los borra
+   ```
+
+   Va por la service key en vez del pooler, así que no pide la contraseña de la
+   base. El equivalente en SQL está en `supabase/seed.sql`.
 3. Copie a `.env` la URL, la `anon key` y la `service_role key`.
 
 ### Primer acceso de veeduría
 
-Los tokens se generan desde `/veeduria`, así que el primero se crea a mano:
+Los tokens se generan desde `/veeduria/personas`, así que el primero se crea a mano:
 
 ```bash
 node scripts/token-veedor.mjs "Su nombre"
@@ -62,8 +118,10 @@ el botón de "copiar mensaje" para pegarlo a mano.
 | `/mapa` | público | Los mismos datos y filtros sobre Leaflet + OpenStreetMap |
 | `/lugar/[id]` | público | Detalle, cómo llegar, reportar desactualizado |
 | `/registrar` | público | Cómo pedir un acceso |
-| `/mi-lugar?k=…` | con token | Cambiar estado de un toque y editar los datos |
-| `/veeduria?k=…` | veeduría | Moderar, generar y revocar accesos, ver reportes |
+| `/entrar` | público | Pegar el link o el código cuando la sesión se perdió |
+| `/mi-lugar` | con sesión | Setup la primera vez; después, panel del centro |
+| `/veeduria` | veeduría | Moderar la cola y ver los reportes del público |
+| `/veeduria/personas` | veeduría | Generar links, ver quién tiene qué lugar, revocar |
 
 Los filtros viven en la URL, así que un link de WhatsApp puede llevar "acopios en Bogotá
 que necesitan agua" ya aplicado.

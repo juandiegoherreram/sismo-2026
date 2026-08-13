@@ -3,34 +3,30 @@
 </svelte:head>
 
 <main class="px-4 py-6">
-	<h1 class="text-2xl font-bold tracking-tight text-stone-900">¿Coordina un punto de ayuda?</h1>
+	<h1 class="text-2xl font-bold tracking-tight text-stone-900">Pedir acceso para su punto</h1>
 
 	<p class="mt-3 text-stone-700">
-		Este directorio no permite que cualquiera cree entradas. En una emergencia, una base de datos
-		abierta se llena de duplicados y de información falsa en cuestión de horas, y termina haciendo
-		más daño que bien.
+		Los accesos se entregan uno por uno, hablando antes con quien responde por el sitio. Con cada
+		uno se registra un punto y se mantiene al día: su estado, qué está recibiendo y qué no.
 	</p>
 
 	<p class="mt-3 text-stone-700">
-		Por eso los accesos se entregan uno por uno, hablando antes con la persona responsable del
-		sitio. Cada acceso permite registrar <strong>un solo lugar</strong> y mantenerlo actualizado.
+		No es un trámite: es lo que evita que en dos días el directorio esté lleno de puntos repetidos,
+		cerrados o inventados. Un dato equivocado acá mueve gente y camionetas a donde no hacen falta.
 	</p>
 
 	<div class="card mt-6 p-4">
-		<h2 class="font-bold text-stone-900">Cómo pedir el suyo</h2>
+		<h2 class="font-bold text-stone-900">Cómo pedirlo</h2>
 		<p class="mt-2 text-stone-700">
-			Escríbanos por Instagram o WhatsApp contando qué punto coordina, dónde queda y cómo
-			confirmarlo. Le respondemos con su link de acceso.
+			Escríbanos y cuéntenos qué punto coordina, dónde queda y cómo podemos confirmarlo. Le
+			respondemos con su link.
 		</p>
 		<!-- TODO: poner acá el usuario de Instagram y el número reales del equipo. -->
-		<p class="mt-3 text-sm text-stone-500">
-			Contacto del equipo: pendiente de definir antes de publicar.
-		</p>
+		<p class="mt-3 text-sm text-stone-500">Contacto del equipo: pendiente de definir antes de publicar.</p>
 	</div>
 
 	<p class="mt-6 text-stone-700">
-		Si ya tiene su link, ábralo directamente: lleva a su pantalla de administración. Guárdelo, es
-		la única forma de entrar.
+		Si ya tiene su link, ábralo: lleva directo a su panel. Guárdelo, es la única forma de entrar.
 	</p>
 
 	<a href="/" class="btn-secondary mt-6 inline-block">Volver al directorio</a>

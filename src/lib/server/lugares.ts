@@ -1,7 +1,15 @@
 import { error } from '@sveltejs/kit';
 import { supabase } from './supabase';
-import type { EstadoOperativo, Filtros, LugarConNecesidades, Necesidad } from '$lib/types';
-import { ESTADOS_OPERATIVOS } from '$lib/constantes';
+import type {
+	EstadoOperativo,
+	EtiquetaNecesidad,
+	Filtros,
+	Item,
+	ItemNuevo,
+	LugarConNecesidades,
+	Necesidad
+} from '$lib/types';
+import { ESTADOS_OPERATIVOS, NECESIDADES } from '$lib/constantes';
 
 /**
  * Nunca mostrar una lista vacía cuando la base falla: alguien podría concluir
@@ -17,20 +25,32 @@ const ORDEN_ESTADO = new Map<EstadoOperativo, number>(
 	ESTADOS_OPERATIVOS.map((e) => [e.valor, e.orden])
 );
 
-const CAMPOS = `
-  id, nombre, tipo, ciudad, departamento, direccion, referencia, lat, lng,
-  horario, contacto_publico, nota, estado_operativo, estado_moderacion,
-  nota_moderacion, creado_en, actualizado_en,
-  lugar_necesidades ( etiqueta, nivel )
+export const CAMPOS = `
+  id, nombre, tipo, ciudad, departamento, direccion,
+  barrio, edificio, torre, piso, apartamento, referencia, lat, lng,
+  horario, contacto_publico, texto_libre,
+  estado_operativo, estado_moderacion, nota_moderacion, creado_en, actualizado_en,
+  lugar_necesidades ( etiqueta, nivel ),
+  lugar_items ( id, texto, categoria, nivel, orden )
 `;
 
-type FilaCruda = Omit<LugarConNecesidades, 'necesidades'> & {
+type FilaCruda = Omit<LugarConNecesidades, 'necesidades' | 'items'> & {
 	lugar_necesidades: Necesidad[] | null;
+	lugar_items: Item[] | null;
 };
 
-function normalizar(fila: FilaCruda): LugarConNecesidades {
-	const { lugar_necesidades, ...resto } = fila;
-	return { ...resto, necesidades: lugar_necesidades ?? [] };
+/** El orden de los ítems lo fija quien los escribió; el id desempata. */
+function porOrden(a: Item, b: Item): number {
+	return a.orden - b.orden || a.id - b.id;
+}
+
+export function normalizar(fila: FilaCruda): LugarConNecesidades {
+	const { lugar_necesidades, lugar_items, ...resto } = fila;
+	return {
+		...resto,
+		necesidades: lugar_necesidades ?? [],
+		items: (lugar_items ?? []).slice().sort(porOrden)
+	};
 }
 
 /**
@@ -58,7 +78,9 @@ export async function listarAprobados(filtros: Filtros): Promise<LugarConNecesid
 		const escapado = filtros.q.replace(/[%,()]/g, ' ').trim();
 		if (escapado) {
 			query = query.or(
-				`nombre.ilike.%${escapado}%,direccion.ilike.%${escapado}%,referencia.ilike.%${escapado}%`
+				`nombre.ilike.%${escapado}%,direccion.ilike.%${escapado}%,` +
+					`referencia.ilike.%${escapado}%,barrio.ilike.%${escapado}%,` +
+					`edificio.ilike.%${escapado}%,texto_libre.ilike.%${escapado}%`
 			);
 		}
 	}
@@ -72,9 +94,19 @@ export async function listarAprobados(filtros: Filtros): Promise<LugarConNecesid
 	// El filtro por necesidad se aplica acá y no en SQL: con un inner join, un
 	// lugar que necesita agua vendría con el resto de sus necesidades recortado,
 	// y la tarjeta mostraría información incompleta.
-	if (filtros.necesidad) {
-		lugares = lugares.filter((l) =>
-			l.necesidades.some((n) => n.etiqueta === filtros.necesidad && n.nivel !== 'no_recibir')
+	//
+	// Cuenta tanto la etiqueta general como los ítems escritos a mano: quien
+	// puso "pañales talla 2" y nada más debe salir igual al filtrar por aseo.
+	//
+	// Con varias marcadas la regla es O y no Y: quien lleva agua y pañales
+	// quiere ver todo punto que reciba cualquiera de las dos. Con Y la lista se
+	// vaciaría casi siempre y parecería que no hay dónde ir.
+	if (filtros.necesidades.length) {
+		const buscadas = new Set<EtiquetaNecesidad>(filtros.necesidades);
+		lugares = lugares.filter(
+			(l) =>
+				l.necesidades.some((n) => buscadas.has(n.etiqueta) && n.nivel !== 'no_recibir') ||
+				l.items.some((i) => i.categoria && buscadas.has(i.categoria) && i.nivel !== 'no_recibir')
 		);
 	}
 
@@ -110,10 +142,19 @@ export async function listarCiudades(): Promise<string[]> {
 
 export function leerFiltros(url: URL): Filtros {
 	const limpio = (clave: string) => url.searchParams.get(clave)?.trim() || null;
+
+	// `necesidad=agua,aseo`. Se valida contra la lista conocida para que una URL
+	// pegada a mano no meta basura en la consulta ni en los chips de la pantalla.
+	const conocidas = new Set(NECESIDADES.map((n) => n.valor));
+	const necesidades = (limpio('necesidad') ?? '')
+		.split(',')
+		.map((n) => n.trim())
+		.filter((n): n is EtiquetaNecesidad => conocidas.has(n as EtiquetaNecesidad));
+
 	return {
 		ciudad: limpio('ciudad'),
 		tipo: limpio('tipo') as Filtros['tipo'],
-		necesidad: limpio('necesidad') as Filtros['necesidad'],
+		necesidades: [...new Set(necesidades)],
 		q: limpio('q')
 	};
 }
@@ -127,4 +168,19 @@ export async function guardarNecesidades(lugarId: string, necesidades: Necesidad
 		.from('lugar_necesidades')
 		.insert(necesidades.map((n) => ({ lugar_id: lugarId, ...n })));
 	if (err) caer('guardar necesidades', err);
+}
+
+/**
+ * Reemplaza la lista de ítems en bloque. Borrar e insertar en vez de hacer un
+ * diff porque la lista es corta y se reordena entera: el id de un ítem no
+ * significa nada para nadie, no vale la pena preservarlo.
+ */
+export async function guardarItems(lugarId: string, items: ItemNuevo[]): Promise<void> {
+	await supabase.from('lugar_items').delete().eq('lugar_id', lugarId);
+	if (!items.length) return;
+
+	const { error: err } = await supabase
+		.from('lugar_items')
+		.insert(items.map((item, i) => ({ lugar_id: lugarId, orden: i, ...item })));
+	if (err) caer('guardar ítems', err);
 }

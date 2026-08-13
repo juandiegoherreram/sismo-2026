@@ -38,7 +38,7 @@
 <section class="mt-8 border-t border-stone-200 pt-5">
 	{#if listo}
 		<p class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
-			Gracias. Ya avisamos a quienes revisan la información.
+			Gracias. Le queda avisado a quien maneja este punto.
 		</p>
 	{:else if !abierto}
 		<button type="button" class="text-sm font-semibold text-stone-600 underline" onclick={() => (abierto = true)}>

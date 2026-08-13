@@ -1,21 +1,24 @@
-import { error } from '@sveltejs/kit';
-import { leerToken, requireToken } from '$lib/server/auth';
+import { requireSesion } from '$lib/server/auth';
 import { obtenerPorId } from '$lib/server/lugares';
+import { listarReportesDeLugar } from '$lib/server/reportes';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url, setHeaders }) => {
-	// Pantalla personal detrás de un token: nunca debe quedar en una caché
+export const load: PageServerLoad = async (event) => {
+	// Pantalla personal detrás de una sesión: nunca debe quedar en una caché
 	// compartida ni en la del navegador.
-	setHeaders({ 'cache-control': 'private, no-store' });
+	event.setHeaders({ 'cache-control': 'private, no-store' });
 
-	const valor = leerToken(url);
-	if (!valor) throw error(401, 'Abra el link de acceso que le enviamos');
-
-	const token = await requireToken(valor);
+	const token = requireSesion(event);
 	const lugar = token.lugar_id ? await obtenerPorId(token.lugar_id) : null;
+
+	// Lo que el público reportó sobre este lugar llega acá y no a veeduría: el
+	// único que puede arreglar un "ya no reciben" en diez segundos es quien está
+	// parado adentro.
+	const reportes = token.lugar_id ? await listarReportesDeLugar(token.lugar_id) : [];
 
 	return {
 		lugar,
+		reportes,
 		rol: token.rol,
 		etiquetaToken: token.etiqueta
 	};

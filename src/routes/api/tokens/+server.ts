@@ -1,13 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { supabase } from '$lib/server/supabase';
-import {
-	generarToken,
-	hashToken,
-	leerToken,
-	registrarEdicion,
-	requireVeedor
-} from '$lib/server/auth';
+import { generarToken, hashToken, registrarEdicion, requireVeedor } from '$lib/server/auth';
 import { validateOptionalText, validateText } from '$lib/server/validate';
 import { waSend, whatsappConfigurado } from '$lib/server/whatsapp-api';
 import type { RequestHandler } from './$types';
@@ -22,10 +16,10 @@ function armarMensaje(link: string): string {
 }
 
 /** Genera un token nuevo. Solo veeduría. */
-export const POST: RequestHandler = async ({ request, url }) => {
-	const veedor = await requireVeedor(leerToken(url, request));
+export const POST: RequestHandler = async (event) => {
+	const veedor = await requireVeedor(event);
 
-	const cuerpo = await request.json().catch(() => null);
+	const cuerpo = await event.request.json().catch(() => null);
 	if (!cuerpo) throw error(400, 'Petición inválida');
 
 	const etiqueta = validateText(cuerpo.etiqueta, 'La descripción', 160, 2);
@@ -42,7 +36,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 	if (err || !data) throw error(500, 'No se pudo generar el acceso');
 
-	const base = env.PUBLIC_SITE_URL || url.origin;
+	const base = env.PUBLIC_SITE_URL || event.url.origin;
 	const link = `${base}${rol === 'veedor' ? '/veeduria' : '/mi-lugar'}?k=${valor}`;
 
 	await registrarEdicion(null, veedor.id, 'token:crear', { etiqueta, rol, canal });
@@ -61,14 +55,32 @@ export const POST: RequestHandler = async ({ request, url }) => {
 	}
 
 	// Única vez que el token viaja en claro: después solo existe su hash.
-	return json({ link, mensaje: armarMensaje(link), enviado, fallo }, { status: 201 });
+	return json({ id: data.id, link, mensaje: armarMensaje(link), enviado, fallo }, { status: 201 });
+};
+
+/**
+ * Cambia la etiqueta de un acceso — corregir un nombre mal escrito o anotar
+ * "ya no responde" sin perder el historial de quién tiene qué.
+ */
+export const PATCH: RequestHandler = async (event) => {
+	const veedor = await requireVeedor(event);
+
+	const cuerpo = await event.request.json().catch(() => null);
+	const id = validateText(cuerpo?.id, 'El acceso', 40);
+	const etiqueta = validateText(cuerpo?.etiqueta, 'La descripción', 160, 2);
+
+	const { error: err } = await supabase.from('tokens').update({ etiqueta }).eq('id', id);
+	if (err) throw error(500, 'No se pudo actualizar el acceso');
+
+	await registrarEdicion(null, veedor.id, 'token:editar', { token_id: id, etiqueta });
+	return json({ ok: true });
 };
 
 /** Revoca un token. El link deja de servir de inmediato. */
-export const DELETE: RequestHandler = async ({ request, url }) => {
-	const veedor = await requireVeedor(leerToken(url, request));
+export const DELETE: RequestHandler = async (event) => {
+	const veedor = await requireVeedor(event);
 
-	const cuerpo = await request.json().catch(() => null);
+	const cuerpo = await event.request.json().catch(() => null);
 	const id = validateText(cuerpo?.id, 'El acceso', 40);
 
 	if (id === veedor.id) throw error(400, 'No puede revocar su propio acceso');

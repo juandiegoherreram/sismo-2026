@@ -1,10 +1,11 @@
 import { error, json } from '@sveltejs/kit';
 import { supabase } from '$lib/server/supabase';
-import { leerToken, marcarUso, registrarEdicion, requireToken } from '$lib/server/auth';
-import { guardarNecesidades } from '$lib/server/lugares';
+import { marcarUso, registrarEdicion, requireAcceso } from '$lib/server/auth';
+import { guardarItems, guardarNecesidades } from '$lib/server/lugares';
 import {
 	validateCoordenadas,
 	validateEstadoOperativo,
+	validateItems,
 	validateNecesidades,
 	validateOptionalText,
 	validateText,
@@ -12,33 +13,49 @@ import {
 } from '$lib/server/validate';
 import type { RequestHandler } from './$types';
 
-/** Reclamo del lugar: un token solo puede hacer esto una vez. */
-export const POST: RequestHandler = async ({ request, url }) => {
-	const token = await requireToken(leerToken(url, request));
-
-	if (token.lugar_id) {
-		throw error(409, 'Este acceso ya tiene un lugar registrado. Solo se permite uno por token.');
-	}
-
-	const cuerpo = await request.json().catch(() => null);
-	if (!cuerpo) throw error(400, 'Petición inválida');
-
+/** Campos comunes a crear y editar: la misma forma sale de un solo formulario. */
+function leerCampos(cuerpo: Record<string, unknown>) {
 	const { lat, lng } = validateCoordenadas(cuerpo.lat, cuerpo.lng);
-	const necesidades = validateNecesidades(cuerpo.necesidades);
 
-	const nuevo = {
+	return {
 		nombre: validateText(cuerpo.nombre, 'El nombre', 120, 3),
 		tipo: validateTipo(cuerpo.tipo),
 		ciudad: validateText(cuerpo.ciudad, 'La ciudad', 80, 2),
 		departamento: validateText(cuerpo.departamento, 'El departamento', 80, 2),
 		direccion: validateText(cuerpo.direccion, 'La dirección', 200, 5),
+
+		// Ubicación fina, toda opcional y en campos propios.
+		barrio: validateOptionalText(cuerpo.barrio, 80),
+		edificio: validateOptionalText(cuerpo.edificio, 80),
+		torre: validateOptionalText(cuerpo.torre, 30),
+		piso: validateOptionalText(cuerpo.piso, 20),
+		apartamento: validateOptionalText(cuerpo.apartamento, 30),
 		referencia: validateOptionalText(cuerpo.referencia, 200),
+
 		horario: validateOptionalText(cuerpo.horario, 120),
 		contacto_publico: validateOptionalText(cuerpo.contacto_publico, 80),
-		nota: validateOptionalText(cuerpo.nota, 140),
-		estado_operativo: validateEstadoOperativo(cuerpo.estado_operativo ?? 'estable'),
+		texto_libre: validateOptionalText(cuerpo.texto_libre, 2000),
 		lat,
 		lng
+	};
+}
+
+/** Reclamo del lugar: un token solo puede hacer esto una vez. */
+export const POST: RequestHandler = async (event) => {
+	const token = await requireAcceso(event);
+
+	if (token.lugar_id) {
+		throw error(409, 'Este acceso ya tiene un lugar registrado. Solo se permite uno por token.');
+	}
+
+	const cuerpo = await event.request.json().catch(() => null);
+	if (!cuerpo) throw error(400, 'Petición inválida');
+
+	const necesidades = validateNecesidades(cuerpo.necesidades);
+	const items = validateItems(cuerpo.items);
+	const nuevo = {
+		...leerCampos(cuerpo),
+		estado_operativo: validateEstadoOperativo(cuerpo.estado_operativo ?? 'estable')
 	};
 
 	const { data, error: err } = await supabase.from('lugares').insert(nuevo).select('id').single();
@@ -60,35 +77,25 @@ export const POST: RequestHandler = async ({ request, url }) => {
 	}
 
 	await guardarNecesidades(lugarId, necesidades);
+	await guardarItems(lugarId, items);
 	await registrarEdicion(lugarId, token.id, 'crear', { nombre: nuevo.nombre });
 
 	return json({ id: lugarId }, { status: 201 });
 };
 
 /** Edición completa del lugar propio. */
-export const PATCH: RequestHandler = async ({ request, url }) => {
-	const token = await requireToken(leerToken(url, request));
+export const PATCH: RequestHandler = async (event) => {
+	const token = await requireAcceso(event);
 	if (!token.lugar_id) throw error(409, 'Todavía no ha registrado su lugar');
 
-	const cuerpo = await request.json().catch(() => null);
+	const cuerpo = await event.request.json().catch(() => null);
 	if (!cuerpo) throw error(400, 'Petición inválida');
 
-	const { lat, lng } = validateCoordenadas(cuerpo.lat, cuerpo.lng);
 	const necesidades = validateNecesidades(cuerpo.necesidades);
-
+	const items = validateItems(cuerpo.items);
 	const cambios = {
-		nombre: validateText(cuerpo.nombre, 'El nombre', 120, 3),
-		tipo: validateTipo(cuerpo.tipo),
-		ciudad: validateText(cuerpo.ciudad, 'La ciudad', 80, 2),
-		departamento: validateText(cuerpo.departamento, 'El departamento', 80, 2),
-		direccion: validateText(cuerpo.direccion, 'La dirección', 200, 5),
-		referencia: validateOptionalText(cuerpo.referencia, 200),
-		horario: validateOptionalText(cuerpo.horario, 120),
-		contacto_publico: validateOptionalText(cuerpo.contacto_publico, 80),
-		nota: validateOptionalText(cuerpo.nota, 140),
+		...leerCampos(cuerpo),
 		estado_operativo: validateEstadoOperativo(cuerpo.estado_operativo),
-		lat,
-		lng,
 		actualizado_en: new Date().toISOString()
 	};
 
@@ -96,6 +103,7 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
 	if (err) throw error(500, 'No se pudieron guardar los cambios');
 
 	await guardarNecesidades(token.lugar_id, necesidades);
+	await guardarItems(token.lugar_id, items);
 	await marcarUso(token.id);
 	await registrarEdicion(token.lugar_id, token.id, 'editar', cambios);
 
