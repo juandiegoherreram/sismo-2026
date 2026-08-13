@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Marca ──────────────────────────────────────────────────────────────── */
+  --color-brand-50:  #edfcf7;
+  --color-brand-100: #d2f9ec;
+  --color-brand-200: #a8f0d8;
+  --color-brand-300: #70e2be;
+  --color-brand-400: #38cba0;
+  --color-brand-500: #18b087;
+  --color-brand-600: #0e8f6d;
+  --color-brand-700: #0d7259;
+  --color-brand-800: #0d5b47;
+  --color-brand-900: #0c4b3c;
+  --color-brand-950: #052b22;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* Tema claro a propósito: esto se consulta afuera, con sol directo. */
+body {
+  @apply bg-stone-50 text-stone-900 font-sans antialiased;
+}
+
+/* ── Formularios ─────────────────────────────────────────────────────────── */
+.input {
+  @apply w-full bg-white border border-stone-300 rounded-xl px-4 py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-transparent transition;
+  font-size: 16px; /* evita auto-zoom en iOS */
+}
+
+.label {
+  @apply block text-sm font-semibold text-stone-700 mb-1.5;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────────────── */
+.btn-primary {
+  @apply bg-brand-700 hover:bg-brand-800 active:bg-brand-900 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-5 py-3 transition;
+}
+
+.btn-secondary {
+  @apply bg-white hover:bg-stone-100 active:bg-stone-200 disabled:opacity-40 disabled:cursor-not-allowed text-stone-800 font-medium rounded-xl px-5 py-3 transition border border-stone-300;
+}
+
+.btn-danger {
+  @apply bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-40 text-white font-semibold rounded-xl px-5 py-3 transition;
+}
+
+/* ── Chips de filtro ─────────────────────────────────────────────────────── */
+.chip {
+  @apply inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition whitespace-nowrap;
+}
+
+.chip-off {
+  @apply bg-white border-stone-300 text-stone-700 hover:bg-stone-100;
+}
+
+.chip-on {
+  @apply bg-brand-700 border-brand-700 text-white;
+}
+
+.card {
+  @apply bg-white border border-stone-200 rounded-2xl shadow-sm;
+}
+
+/* El mapa necesita CSS global: los nodos los crea Leaflet fuera de Svelte. */
+.leaflet-container {
+  @apply font-sans;
+  background: #e7e5e4;
+}
