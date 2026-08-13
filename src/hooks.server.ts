@@ -14,16 +14,31 @@ const DURACION = 60 * 60 * 24 * 30;
  * captura de pantalla que la gente manda por WhatsApp para pedir ayuda. Con la
  * cookie puesta, el link original sigue funcionando cuantas veces quieran
  * abrirlo, que es como la gente lo va a usar: guardado en un chat.
+ *
+ * ── Sobre los redirects ────────────────────────────────────────────────────
+ * Netlify le vuelve a pegar el query string de la petición a cualquier
+ * `Location` relativa. O sea que responder `/veeduria` para limpiar el `?k=`
+ * llega al navegador como `/veeduria?k=…`, el hook lo procesa de nuevo y se
+ * arma un bucle infinito de redirects. En local no se ve, porque ahí no hay
+ * proxy de por medio.
+ *
+ * Por eso las dos defensas de abajo, que son independientes a propósito:
+ *
+ *   1. Los redirects salen con URL absoluta, que Netlify sí respeta.
+ *   2. Aunque el `k` sobreviva, no se vuelve a canjear si la cookie ya vale lo
+ *      mismo. Con eso el bucle es imposible por construcción, y lo peor que
+ *      puede pasar es que el token quede visible en la barra.
  */
 export const handle: Handle = async ({ event, resolve }) => {
 	const { url, cookies, locals } = event;
 
 	const enUrl = url.searchParams.get('k')?.trim();
-	if (enUrl) {
-		const token = await buscarTokenActivo(enUrl);
+	const guardado = cookies.get(COOKIE_ACCESO);
 
-		const destino = new URL(url);
-		destino.searchParams.delete('k');
+	// `enUrl !== guardado`: si el token de la URL ya es el de la sesión, esto no
+	// es alguien entrando sino un query que sobrevivió al redirect. Se ignora.
+	if (enUrl && enUrl !== guardado) {
+		const token = await buscarTokenActivo(enUrl);
 
 		if (token) {
 			cookies.set(COOKIE_ACCESO, enUrl, {
@@ -33,20 +48,29 @@ export const handle: Handle = async ({ event, resolve }) => {
 				secure: url.protocol === 'https:',
 				maxAge: DURACION
 			});
-			// Un veedor que abre un link de editor, o al revés, va a donde le sirve.
-			if (destino.pathname === '/mi-lugar' && token.rol === 'veedor') destino.pathname = '/veeduria';
-		} else {
-			// Sin token válido no se pisa la cookie que ya tuviera: puede ser
-			// alguien reusando un link viejo desde una sesión que sí sirve.
-			destino.pathname = '/entrar';
-			destino.search = '';
-			destino.searchParams.set('error', 'invalido');
+
+			const destino = new URL(url);
+			destino.searchParams.delete('k');
+
+			// Cada quien a la pantalla que le sirve, venga por donde venga.
+			if (destino.pathname === '/entrar' || destino.pathname === '/') {
+				destino.pathname = token.rol === 'veedor' ? '/veeduria' : '/mi-lugar';
+			} else if (destino.pathname === '/mi-lugar' && token.rol === 'veedor') {
+				destino.pathname = '/veeduria';
+			}
+
+			throw redirect(303, destino.toString());
 		}
 
-		throw redirect(303, destino.pathname + destino.search);
+		// Token inválido. Se manda a /entrar, salvo que ya estemos ahí con el
+		// aviso puesto: si Netlify devuelve el `k` muerto, este es el freno que
+		// evita rebotar contra /entrar para siempre.
+		const yaAvisado = url.pathname === '/entrar' && url.searchParams.get('error') === 'invalido';
+		if (!yaAvisado) {
+			throw redirect(303, new URL('/entrar?error=invalido', url.origin).toString());
+		}
 	}
 
-	const guardado = cookies.get(COOKIE_ACCESO);
 	if (guardado) {
 		const token = await buscarTokenActivo(guardado);
 		if (token) locals.acceso = token;
