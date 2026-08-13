@@ -200,7 +200,13 @@ if (process.argv.includes('--limpiar')) {
 	}
 
 	const token = await crearVeedor();
-	const base = env.PUBLIC_SITE_URL || 'http://localhost:5173';
+
+	// SITE_URL del entorno gana sobre la del .env: el .env apunta a localhost
+	// para desarrollo, y un acceso que se va a entregar de verdad tiene que
+	// salir con el dominio público.
+	//
+	//   SITE_URL=https://ayudacolombia.netlify.app node scripts/sembrar.mjs --solo-token "Nombre"
+	const base = process.env.SITE_URL || env.PUBLIC_SITE_URL || 'http://localhost:5173';
 	console.log(`
 Acceso de veeduría (guárdelo, no se vuelve a mostrar):
 
